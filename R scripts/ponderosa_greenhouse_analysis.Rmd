@@ -1,0 +1,174 @@
+---
+title: "Ponderosa Greenhouse Analysis"
+author: "Katie Nigro"
+date: "8/19/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#load packages
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(lubridate)
+```
+#Length Measurements
+
+```{r}
+#read in data
+
+measurement_data <- read_csv("C:/Users/Katie/Google Drive/Ponderosa seed project/data/greenhouse exp/greenhouse_measurements.csv", col_types = "cddccDdddddddddddddddddcc")
+head(measurement_data)
+
+```
+
+```{r}
+#get data in order
+measurement_data<- measurement_data %>% 
+  unite("rack","row","column","mom", sep="_", col="uid", remove=FALSE)
+
+measurement_data <- measurement_data %>% 
+  filter(!(mom == "blank" | mom == "BLANK" | mom == ""))
+
+measurement_data$pop =  substr(measurement_data$mom,0,3)
+```
+
+```{r}
+#make summarized dataset
+measurement_data <- measurement_data %>% 
+  rowwise() %>% 
+  mutate(ave.cotyl.length = mean(c(cotyl.length1,cotyl.length2, cotyl.length3),na.rm=TRUE),
+         max.prim.needle.length = pmax(needle.length1, needle.length2, needle.length3),
+         max.true.needle.length = max(c(true.need.length1,true.need.length2,true.need.length3,true.need.length4,true.need.length5,true.need.length6,true.need.length7,true.need.length8,true.need.length9,true.need.length10),na.rm=TRUE),
+         ave.true.needle.length = mean(c(true.need.length1,true.need.length2,true.need.length3,true.need.length4,true.need.length5,true.need.length6,true.need.length7,true.need.length8,true.need.length9,true.need.length10),na.rm=TRUE)) %>% 
+  dplyr::select(-cotyl.length1, -cotyl.length2, -cotyl.length3,-needle.length1, -needle.length2, -needle.length3,-contains("true.need.length"))
+
+View(measurement_data)
+
+unique(measurement_data$mom)
+
+#compare stem lengths between families, populations and water treatments
+ggplot(measurement_data, aes(x=mom, y=stem.length, fill=treatment))+
+  geom_boxplot()
+
+ggplot(measurement_data, aes(x=pop, y=stem.length, fill=treatment))+
+  geom_boxplot()
+
+#compare cotyledon length 
+ggplot(measurement_data, aes(x=mom, y=ave.cotyl.length, fill=treatment))+
+  geom_boxplot()
+
+ggplot(measurement_data, aes(x=pop, y=ave.cotyl.length, fill=treatment))+
+  geom_boxplot()
+
+#compare needle length - need to do this by date
+##first create dataframe with difference in needle length between dates
+prim.needle.comp <- measurement_data %>% 
+  filter(date < '2021-07-30') %>% 
+  left_join(measurement_data %>% 
+              filter(date > '2021-07-30'), by="uid") %>% 
+  filter(!is.na(max.prim.needle.length.y)) %>% 
+  mutate(prim.needle.growth = (max.prim.needle.length.y - max.prim.needle.length.x)/as.numeric(date.y - date.x)) %>% 
+    mutate(prim.needle.growth = if_else(prim.needle.growth < 0, 0, prim.needle.growth))
+
+ggplot(prim.needle.comp, aes(x=pop.x, y=max.prim.needle.length.y, fill=treatment.x))+
+  geom_boxplot()
+
+ggplot(prim.needle.comp, aes(x=pop.x, y=prim.needle.growth, fill=treatment.x))+
+  geom_boxplot()
+
+##remaining sample size 
+sample.size.drought.start <- measurement_data %>% 
+  filter(treatment=="DROUGHT", date < '2021-07-30') %>% 
+  group_by(mom) %>% 
+  summarise(n.drought = n())
+sample.size.water.start<- measurement_data %>% 
+  filter(treatment=="WATERED", date < '2021-07-30') %>% 
+  group_by(mom) %>% 
+  summarise(n.watered = n())
+
+sample.size.drought.aug <- prim.needle.comp %>% 
+  filter(treatment.x == "DROUGHT") %>% 
+  group_by(mom.x) %>% 
+  summarise(n.drought.aug = n())
+sample.size.water.aug<- prim.needle.comp %>% 
+  filter(treatment.x == "WATERED") %>% 
+  group_by(mom.x) %>% 
+  summarise(n.watered.aug = n())
+
+sample.size <- sample.size.drought.start %>% 
+  left_join(sample.size.drought.aug, by=c("mom" = "mom.x")) %>% 
+  left_join(sample.size.water.start, by="mom") %>% 
+  left_join(sample.size.water.aug, by=c("mom"="mom.x"))
+View(sample.size)
+sample.size$n.watered-sample.size$n.watered.aug
+sample.size$n.drought-sample.size$n.drought.aug
+
+
+write.csv(sample.start, "C:/Users/Katie/Google Drive/Ponderosa seed project/data/greenhouse exp/sample.size.csv")
+
+```
+
+#Root-Shoot Biomass
+
+```{r}
+#read in data
+rs_data <- read_csv("C:/Users/Katie/Google Drive/Ponderosa seed project/data/greenhouse exp/ponderosa_root_elongation.csv")
+```
+
+```{r}
+ggplot(rs_data, aes(x=trt,y=dry_total_mg))+
+  geom_boxplot()
+
+ggplot(rs_data, aes(x=trt,y=dry_root_mg))+
+  geom_boxplot()
+
+ggplot(rs_data, aes(x=trt,y=dry_shoot_mg))+
+  geom_boxplot()
+```
+
+```{r}
+#look at root:shoot ratio
+
+rs_data <- rs_data %>% 
+  mutate(root.shoot = dry_root_mg/dry_shoot_mg)
+rs_data$pop <- substr(rs_data$family, 0,3)
+
+ggplot(rs_data, aes(x=family, fill=trt, y=root.shoot))+
+  geom_bar(stat='identity', position = 'dodge')
+
+ggplot(rs_data, aes(x=trt, y=root.shoot))+
+  geom_boxplot()
+
+ggplot(rs_data, aes(x=pop, fill=trt, y=root.shoot))+
+  geom_boxplot()
+```
+
+#Soil Water Distribution
+
+```{r}
+rs_data <- rs_data %>% 
+  mutate(water1 = wet_weight1_mg - dry_weight1_mg,
+         water2 = wet_weight2_mg - dry_weight2_mg,
+         water3 = wet_weight3_mg - dry_weight3_mg)
+
+water_wts <- rs_data %>% 
+  select(trt, family, water1, water2, water3) %>% 
+  pivot_longer(cols=c(water1, water2, water3), names_to = "section", values_to = "water_weight")
+
+ggplot(water_wts, aes(fill=trt, y=water_weight, x=section))+
+  geom_boxplot()
+
+ggplot(water_wts, aes(x=family, y=water_weight, fill=section))+
+  facet_wrap(~trt)+
+  geom_bar(stat='identity')+
+  theme(axis.text.x = element_text(angle=45, vjust=1))
+
+```
