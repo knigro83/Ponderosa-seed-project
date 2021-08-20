@@ -153,6 +153,8 @@ ggplot(rs_data, aes(x=pop, fill=trt, y=root.shoot))+
 
 #Soil Water Distribution
 
+Need to measure volume in each section of conetainer to scale these measurements. 
+
 ```{r}
 rs_data <- rs_data %>% 
   mutate(water1 = wet_weight1_mg - dry_weight1_mg,
